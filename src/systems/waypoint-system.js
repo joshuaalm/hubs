@@ -53,10 +53,10 @@ function isUnoccupiableSpawnPoint(waypointData) {
 function loadTemplateAndAddToScene(scene, templateId) {
   return new Promise(resolve => {
     const content = document.importNode(document.getElementById(templateId).content.children[0]);
+    scene.appendChild(content, true);
     setTimeout(() => {
       // Without this timeout, this resolves too early in Firefox for Android
       // we have to wait a tick for the attach callbacks to get fired for the elements in a template
-      scene.appendChild(content, true);
       resolve(content);
     }, 0);
   });
