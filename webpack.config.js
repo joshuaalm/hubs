@@ -97,6 +97,7 @@ module.exports = (env, argv) => ({
   entry: {
     index: path.join(__dirname, "src", "index.js"),
     hub: path.join(__dirname, "src", "hub.js"),
+    test: path.join(__dirname, "src", "test.js"),
     scene: path.join(__dirname, "src", "scene.js"),
     avatar: path.join(__dirname, "src", "avatar.js"),
     link: path.join(__dirname, "src", "link.js"),
@@ -267,6 +268,12 @@ module.exports = (env, argv) => ({
           content: process.env.ORIGIN_TRIAL_TOKEN
         }
       ]
+    }),
+    new HTMLWebpackPlugin({
+      filename: "test.html",
+      template: path.join(__dirname, "src", "test.html"),
+      chunks: ["vendor", "engine", "test"],
+      inject: "head"
     }),
     new HTMLWebpackPlugin({
       filename: "scene.html",
