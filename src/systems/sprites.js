@@ -1,4 +1,4 @@
-/* global AFRAME THREE */
+/* global THREE */
 
 // See doc/spritesheet-generation.md for information about this spritesheet
 import spritesheetAction from "../assets/images/spritesheets/sprite-system-action-spritesheet.json";
@@ -10,33 +10,7 @@ import { waitForDOMContentLoaded } from "../utils/async-utils";
 import vert from "./sprites/sprite.vert";
 import frag from "./sprites/sprite.frag";
 import { getThemeColorShifter } from "../utils/theme-sprites";
-
-const multiviewVertPrefix = [
-  // GLSL 3.0 conversion
-  "#version 300 es",
-  "#define attribute in",
-  "#define varying out",
-  "#define texture2D texture",
-  "#extension GL_OVR_multiview : require",
-  "layout(num_views = 2) in;",
-  "uniform mat4 modelViewMatrix;",
-  "uniform mat4 modelViewMatrix2;",
-  "#define modelViewMatrix (gl_ViewID_OVR==0u?modelViewMatrix:modelViewMatrix2)",
-  "uniform mat4 projectionMatrix;",
-  "uniform mat4 projectionMatrix2;",
-  "#define projectionMatrix (gl_ViewID_OVR==0u?projectionMatrix:projectionMatrix2)",
-  ""
-].join("\n");
 const nonmultiviewVertPrefix = ["uniform mat4 modelViewMatrix;", "uniform mat4 projectionMatrix;", ""].join("\n");
-
-const multiviewFragPrefix = [
-  "#version 300 es",
-  "#define varying in",
-  "out highp vec4 pc_fragColor;",
-  "#define gl_FragColor pc_fragColor",
-  "#define texture2D texture",
-  ""
-].join("\n");
 
 const nonmultiviewFragPrefix = "";
 
@@ -45,30 +19,6 @@ function isVisible(o) {
   if (!o.parent) return true;
   return isVisible(o.parent);
 }
-
-AFRAME.registerComponent("sprite", {
-  schema: { name: { type: "string" } },
-  tick() {
-    // TODO when we run out of sprites we currently just stop rendering them. We need to do something better.
-    if (!(this.didRegisterWithSystem || this.didFailToRegister) && this.el.sceneEl.systems["hubs-systems"]) {
-      const registered = this.el.sceneEl.systems["hubs-systems"].spriteSystem.add(this);
-      this.didRegisterWithSystem = registered > 0;
-      this.didFailToRegister = registered < 0;
-    }
-  },
-
-  update() {
-    if (this.didRegisterWithSystem) {
-      this.el.sceneEl.systems["hubs-systems"].spriteSystem.updateUVs(this);
-    }
-  },
-
-  remove() {
-    if (this.didRegisterWithSystem) {
-      this.el.sceneEl.systems["hubs-systems"].spriteSystem.remove(this);
-    }
-  }
-});
 
 const normalizedFrame = (function() {
   const memo = new Map();
@@ -134,44 +84,15 @@ const raycastOnSprite = (function() {
   };
 })();
 
-function getHoverableVisuals(el) {
-  if (!el || !el.components) return null;
-  if (el.components["hoverable-visuals"]) {
-    return el.components["hoverable-visuals"];
-  }
-  return getHoverableVisuals(el.parentEl);
-}
-
-function enableSweepingEffect(comp) {
-  const hoverableVisuals = getHoverableVisuals(comp.el);
-  if (!hoverableVisuals) {
-    return false;
-  }
-
-  const isPinned = hoverableVisuals.el.components.pinnable && hoverableVisuals.el.components.pinnable.data.pinned;
-  const isSpawner = !!hoverableVisuals.el.components["super-spawner"];
-  const isFrozen = hoverableVisuals.el.sceneEl.is("frozen");
-  const hideDueToPinning = !isSpawner && isPinned && !isFrozen;
-  return hoverableVisuals.data.enableSweepingEffect && !hideDueToPinning;
-}
-
 function createGeometry(maxSprites) {
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("a_vertices", new THREE.BufferAttribute(new Float32Array(maxSprites * 3 * 4), 3, false));
-  geometry.setAttribute(
-    "a_hubs_EnableSweepingEffect",
-    new THREE.BufferAttribute(new Float32Array(maxSprites * 4), 1, false)
-  );
-  geometry.setAttribute(
-    "a_hubs_SweepParams",
-    new THREE.BufferAttribute(new Float32Array(maxSprites * 4 * 2), 2, false)
-  );
-  geometry.setAttribute("a_uvs", new THREE.BufferAttribute(new Float32Array(maxSprites * 2 * 4), 2, false));
+  geometry.addAttribute("a_vertices", new THREE.BufferAttribute(new Float32Array(maxSprites * 3 * 4), 3, false));
+  geometry.addAttribute("a_uvs", new THREE.BufferAttribute(new Float32Array(maxSprites * 2 * 4), 2, false));
   const mvCols = new THREE.InterleavedBuffer(new Float32Array(maxSprites * 16 * 4), 16);
-  geometry.setAttribute("mvCol0", new THREE.InterleavedBufferAttribute(mvCols, 4, 0, false));
-  geometry.setAttribute("mvCol1", new THREE.InterleavedBufferAttribute(mvCols, 4, 4, false));
-  geometry.setAttribute("mvCol2", new THREE.InterleavedBufferAttribute(mvCols, 4, 8, false));
-  geometry.setAttribute("mvCol3", new THREE.InterleavedBufferAttribute(mvCols, 4, 12, false));
+  geometry.addAttribute("mvCol0", new THREE.InterleavedBufferAttribute(mvCols, 4, 0, false));
+  geometry.addAttribute("mvCol1", new THREE.InterleavedBufferAttribute(mvCols, 4, 4, false));
+  geometry.addAttribute("mvCol2", new THREE.InterleavedBufferAttribute(mvCols, 4, 8, false));
+  geometry.addAttribute("mvCol3", new THREE.InterleavedBufferAttribute(mvCols, 4, 12, false));
   const indices = new Array(3 * 2 * maxSprites);
   for (let i = 0; i < maxSprites; i++) {
     indices[i * 3 * 2 + 0] = i * 4 + 0;
@@ -207,7 +128,7 @@ export class SpriteSystem {
   }
   constructor(scene) {
     this.missingSprites = [];
-    this.maxSprites = 512;
+    this.maxSprites = 1;
     this.slots = { action: new Array(this.maxSprites), notice: new Array(this.maxSprites) };
     this.spriteWithIndex = { action: new Map(), notice: new Map() };
     this.indexWithSprite = { action: new Map(), notice: new Map() };
@@ -220,96 +141,79 @@ export class SpriteSystem {
       }
     }
 
-    const vertexShader = String.prototype.concat(
-      scene.renderer.vr.multiview ? multiviewVertPrefix : nonmultiviewVertPrefix,
-      vert
-    );
-    const fragmentShader = String.prototype.concat(
-      scene.renderer.vr.multiview ? multiviewFragPrefix : nonmultiviewFragPrefix,
-      frag
-    );
+    const vertexShader = String.prototype.concat(nonmultiviewVertPrefix, vert);
+    const fragmentShader = String.prototype.concat(nonmultiviewFragPrefix, frag);
 
     const domReady = waitForDOMContentLoaded();
 
-    Promise.all([domReady]).then(() => {
+    let resolveReady;
+    this.ready = new Promise(resolve => {
+      resolveReady = resolve;
+    });
+
+    Promise.all([domReady]).then(async () => {
       for (const [spritesheetPng, type] of [[spritesheetActionPng, "action"], [spritesheetNoticePng, "notice"]]) {
-        Promise.all([createImageTexture(spritesheetPng, getThemeColorShifter(type)), waitForDOMContentLoaded()]).then(
-          ([spritesheetTexture]) => {
-            const material = new THREE.RawShaderMaterial({
-              uniforms: {
-                u_spritesheet: { value: spritesheetTexture },
-                hubs_Time: { value: 0 }
-              },
-              vertexShader,
-              fragmentShader,
-              side: THREE.DoubleSide,
-              transparent: true
-            });
-            const mesh = (this.meshes[type] = new THREE.Mesh(createGeometry(this.maxSprites), material));
-            const el = document.createElement("a-entity");
-            el.classList.add("ui");
-            scene.appendChild(el);
-            el.setObject3D("mesh", mesh);
-            mesh.frustumCulled = false;
-            mesh.renderOrder = window.APP.RENDER_ORDER.HUD_ICONS;
-            mesh.raycast = this.raycast.bind(this);
-          }
-        );
+        await Promise.all([
+          createImageTexture(spritesheetPng, getThemeColorShifter(type)),
+          waitForDOMContentLoaded()
+        ]).then(([spritesheetTexture]) => {
+          const material = new THREE.RawShaderMaterial({
+            uniforms: {
+              u_spritesheet: { value: spritesheetTexture }
+            },
+            vertexShader,
+            fragmentShader,
+            side: THREE.DoubleSide,
+            transparent: true
+          });
+          const mesh = (this.meshes[type] = new THREE.Mesh(
+            createGeometry(this.maxSprites),
+            material
+          ));
+          scene.add(mesh);
+          mesh.frustumCulled = false;
+          mesh.renderOrder = window.APP.RENDER_ORDER.HUD_ICONS;
+          mesh.raycast = this.raycast.bind(this);
+          mesh.name = type;
+        });
       }
+      resolveReady();
     });
   }
 
-  tick(t) {
+  tick() {
     if (!this.meshes.action || !this.meshes.notice) return;
 
     for (let i = 0; i < SHEET_TYPES.length; i++) {
       const sheetType = SHEET_TYPES[i];
       const mesh = this.meshes[sheetType];
-      mesh.material.uniforms.hubs_Time.value = t;
-      mesh.material.uniformsNeedUpdate = true;
 
-      const mvCols = mesh.geometry.attributes["mvCol0"].data; // interleaved
-      const aEnableSweepingEffect = mesh.geometry.attributes["a_hubs_EnableSweepingEffect"];
-      const aSweepParams = mesh.geometry.attributes["a_hubs_SweepParams"];
-      for (let i = 0, l = this.slots[sheetType].length; i < l; i++) {
-        const slots = this.slots[sheetType];
-        if (!slots[i]) continue;
+      const mvCols = mesh.geometry.attributes && mesh.geometry.attributes["mvCol0"].data; // interleaved
+      if (mvCols) {
+        for (let i = 0, l = this.slots[sheetType].length; i < l; i++) {
+          const slots = this.slots[sheetType];
+          if (!slots[i]) continue;
 
-        const indexWithSprite = this.indexWithSprite[sheetType];
+          const indexWithSprite = this.indexWithSprite[sheetType];
 
-        const sprite = indexWithSprite.get(i);
+          const sprite = indexWithSprite.get(i);
+          const spriteObj = sprite;
 
-        if (isVisible(sprite.el.object3D)) {
-          const enableSweepingEffectValue = enableSweepingEffect(sprite) ? 1 : 0;
-          aEnableSweepingEffect.array[i * 4 + 0] = enableSweepingEffectValue;
-          aEnableSweepingEffect.array[i * 4 + 1] = enableSweepingEffectValue;
-          aEnableSweepingEffect.array[i * 4 + 2] = enableSweepingEffectValue;
-          aEnableSweepingEffect.array[i * 4 + 3] = enableSweepingEffectValue;
-          aEnableSweepingEffect.needsUpdate = true;
-          if (enableSweepingEffectValue) {
-            const hoverableVisuals = getHoverableVisuals(sprite.el);
-            const s = hoverableVisuals.sweepParams[0];
-            const t = hoverableVisuals.sweepParams[1];
-            aSweepParams.setXY(4 * i + 0, s, t);
-            aSweepParams.setXY(4 * i + 1, s, t);
-            aSweepParams.setXY(4 * i + 2, s, t);
-            aSweepParams.setXY(4 * i + 3, s, t);
-            aSweepParams.needsUpdate = true;
+          if (isVisible(spriteObj)) {
+            spriteObj.updateMatrices();
+            const mat4 = spriteObj.matrixWorld;
+            mvCols.array.set(mat4.elements, i * 4 * 16 + 0);
+            mvCols.array.set(mat4.elements, i * 4 * 16 + 1 * 16);
+            mvCols.array.set(mat4.elements, i * 4 * 16 + 2 * 16);
+            mvCols.array.set(mat4.elements, i * 4 * 16 + 3 * 16);
+            mvCols.needsUpdate = true;
+          } else {
+            mvCols.array.set(ZEROS, i * 4 * 16 + 0);
+            mvCols.array.set(ZEROS, i * 4 * 16 + 1 * 16);
+            mvCols.array.set(ZEROS, i * 4 * 16 + 2 * 16);
+            mvCols.array.set(ZEROS, i * 4 * 16 + 3 * 16);
+            mvCols.needsUpdate = true;
           }
-
-          sprite.el.object3D.updateMatrices();
-          const mat4 = sprite.el.object3D.matrixWorld;
-          mvCols.array.set(mat4.elements, i * 4 * 16 + 0);
-          mvCols.array.set(mat4.elements, i * 4 * 16 + 1 * 16);
-          mvCols.array.set(mat4.elements, i * 4 * 16 + 2 * 16);
-          mvCols.array.set(mat4.elements, i * 4 * 16 + 3 * 16);
-          mvCols.needsUpdate = true;
-        } else {
-          mvCols.array.set(ZEROS, i * 4 * 16 + 0);
-          mvCols.array.set(ZEROS, i * 4 * 16 + 1 * 16);
-          mvCols.array.set(ZEROS, i * 4 * 16 + 2 * 16);
-          mvCols.array.set(ZEROS, i * 4 * 16 + 3 * 16);
-          mvCols.needsUpdate = true;
         }
       }
     }
@@ -320,20 +224,21 @@ export class SpriteSystem {
     const mesh = this.meshes[sheetType];
     const spriteWithIndex = this.spriteWithIndex[sheetType];
 
-    const flipY = mesh.material.uniforms.u_spritesheet.value.flipY;
+    const flipY = true; //mesh.material.uniforms.u_spritesheet.value.flipY;
     const i = spriteWithIndex.get(sprite);
     const frame = normalizedFrame(
       sprite.data.name,
       sheetType === "action" ? spritesheetAction : spritesheetNotice,
       this.missingSprites
     );
-    const aUvs = mesh.geometry.attributes["a_uvs"];
-
-    aUvs.setXY(i * 4 + 0, frame.x, flipY ? 1 - frame.y : frame.y);
-    aUvs.setXY(i * 4 + 1, frame.x + frame.w, flipY ? 1 - frame.y : frame.y);
-    aUvs.setXY(i * 4 + 2, frame.x, flipY ? 1 - frame.y - frame.h : frame.y + frame.h);
-    aUvs.setXY(i * 4 + 3, frame.x + frame.w, flipY ? 1 - frame.y - frame.h : frame.y + frame.h);
-    aUvs.needsUpdate = true;
+    const aUvs = mesh.geometry.attributes && mesh.geometry.attributes["a_uvs"];
+    if (aUvs) {
+      aUvs.setXY(i * 4 + 0, frame.x, flipY ? 1 - frame.y : frame.y);
+      aUvs.setXY(i * 4 + 1, frame.x + frame.w, flipY ? 1 - frame.y : frame.y);
+      aUvs.setXY(i * 4 + 2, frame.x, flipY ? 1 - frame.y - frame.h : frame.y + frame.h);
+      aUvs.setXY(i * 4 + 3, frame.x + frame.w, flipY ? 1 - frame.y - frame.h : frame.y + frame.h);
+      aUvs.needsUpdate = true;
+    }
   }
 
   add(sprite) {
@@ -357,12 +262,14 @@ export class SpriteSystem {
 
     this.updateUVs(sprite);
 
-    const aVertices = mesh.geometry.attributes["a_vertices"];
-    aVertices.setXYZ(i * 4 + 0, -0.5, 0.5, 0);
-    aVertices.setXYZ(i * 4 + 1, 0.5, 0.5, 0);
-    aVertices.setXYZ(i * 4 + 2, -0.5, -0.5, 0);
-    aVertices.setXYZ(i * 4 + 3, 0.5, -0.5, 0);
-    aVertices.needsUpdate = true;
+    const aVertices = mesh.geometry.attributes && mesh.geometry.attributes["a_vertices"];
+    if (aVertices) {
+      aVertices.setXYZ(i * 4 + 0, -0.5, 0.5, 0);
+      aVertices.setXYZ(i * 4 + 1, 0.5, 0.5, 0);
+      aVertices.setXYZ(i * 4 + 2, -0.5, -0.5, 0);
+      aVertices.setXYZ(i * 4 + 3, 0.5, -0.5, 0);
+      aVertices.needsUpdate = true;
+    }
     return 1;
   }
 

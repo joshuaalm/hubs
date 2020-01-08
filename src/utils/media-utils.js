@@ -3,7 +3,7 @@ import { getReticulumFetchUrl } from "./phoenix-utils";
 import mediaHighlightFrag from "./media-highlight-frag.glsl";
 import { mapMaterials } from "./material-utils";
 import HubsTextureLoader from "../loaders/HubsTextureLoader";
-import { validMaterials } from "../components/hoverable-visuals";
+// import { validMaterials } from "../components/hoverable-visuals";
 import { proxiedUrlFor } from "../utils/media-url-utils";
 
 import anime from "animejs";
