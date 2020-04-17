@@ -20,7 +20,7 @@ export const SCHEMA = {
       type: "object",
       additionalProperties: false,
       properties: {
-        displayName: { type: "string", pattern: "^[A-Za-z0-9-]{3,32}$" },
+        displayName: { type: "string", pattern: "^[A-Za-z0-9 -]{3,32}$" },
         avatarId: { type: "string" },
         // personalAvatarId is obsolete, but we need it here for backwards compatibility.
         personalAvatarId: { type: "string" }
@@ -67,6 +67,7 @@ export const SCHEMA = {
       additionalProperties: false,
       properties: {
         muteMicOnEntry: { type: "bool" },
+        audioOutputMode: { type: "string" },
         enableOnScreenJoystickLeft: { type: "bool" },
         enableOnScreenJoystickRight: { type: "bool" },
         onlyShowNametagsInFreeze: { type: "bool" },
@@ -76,7 +77,13 @@ export const SCHEMA = {
         globalVoiceVolume: { type: "number" },
         globalMediaVolume: { type: "number" },
         snapRotationDegrees: { type: "number" },
-        materialQualitySetting: { type: "string" }
+        materialQualitySetting: { type: "string" },
+        disableMovement: { type: "bool" },
+        disableBackwardsMovement: { type: "bool" },
+        disableStrafing: { type: "bool" },
+        disableTeleporter: { type: "bool" },
+        disableAutoPixelRatio: { type: "bool" },
+        movementSpeedModifier: { type: "number" }
       }
     },
 

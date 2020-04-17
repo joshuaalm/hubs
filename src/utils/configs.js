@@ -1,5 +1,6 @@
 import appLogo from "../assets/images/app-logo.png";
 import companyLogo from "../assets/images/company-logo.png";
+import homeHeroBackground from "../assets/images/home-hero-background-unbranded.png";
 import sceneEditorLogo from "../assets/images/editor-logo.png";
 import pdfjs from "pdfjs-dist";
 
@@ -33,6 +34,10 @@ let isAdmin = false;
 
 configs.AVAILABLE_INTEGRATIONS = window.AVAILABLE_INTEGRATIONS || {};
 
+if (process.env.APP_CONFIG) {
+  window.APP_CONFIG = process.env.APP_CONFIG;
+}
+
 if (window.APP_CONFIG) {
   configs.APP_CONFIG = window.APP_CONFIG;
   const { theme } = configs.APP_CONFIG;
@@ -46,18 +51,41 @@ if (window.APP_CONFIG) {
     style.innerHTML = `:root{${colorVars.join("\n")}}`;
     document.head.prepend(style);
   }
+
+  if (!configs.APP_CONFIG.features) {
+    configs.APP_CONFIG.features = {};
+  }
+} else {
+  configs.APP_CONFIG = {
+    features: {}
+  };
 }
+
+const appConfigSchema = process.env.APP_CONFIG_SCHEMA;
 
 const isLocalDevelopment = process.env.NODE_ENV === "development";
 
 configs.feature = featureName => {
-  const enableAll = isLocalDevelopment && !process.env.USE_FEATURE_CONFIG;
+  if (isLocalDevelopment && !process.env.USE_FEATURE_CONFIG) {
+    // This code will be removed in production
+    if (appConfigSchema && appConfigSchema.features && appConfigSchema.features[featureName]) {
+      const valueType = appConfigSchema.features[featureName].type;
 
-  const features = configs.APP_CONFIG && configs.APP_CONFIG.features;
+      if (valueType === "boolean") {
+        return true;
+      } else {
+        return undefined;
+      }
+    }
+  }
 
-  const forceEnableSpoke = featureName === "enable_spoke" && isAdmin;
-
-  return forceEnableSpoke || enableAll || (features && features[featureName]);
+  const value = configs.APP_CONFIG.features[featureName];
+  if (typeof value === "boolean" || featureName === "enable_spoke") {
+    const forceEnableSpoke = featureName === "enable_spoke" && isAdmin;
+    return forceEnableSpoke || value;
+  } else {
+    return value;
+  }
 };
 
 let localDevImages = {};
@@ -65,7 +93,8 @@ if (isLocalDevelopment) {
   localDevImages = {
     logo: appLogo,
     company_logo: companyLogo,
-    editor_logo: sceneEditorLogo
+    editor_logo: sceneEditorLogo,
+    home_background: homeHeroBackground
   };
 }
 
@@ -83,5 +112,6 @@ configs.link = (linkName, defaultValue) => {
 configs.setIsAdmin = _isAdmin => {
   isAdmin = _isAdmin;
 };
+configs.isAdmin = () => isAdmin;
 
 export default configs;

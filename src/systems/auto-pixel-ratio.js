@@ -1,10 +1,13 @@
 // On high-DPI displays, measures the median FPS over time and reduces the
 // pixelRatio if the FPS drops below a threshold.
 
-const FPS_THRESHOLD = 50;
+const LOW_FPS_THRESHOLD = 30;
+const HIGH_FPS_THRESHOLD = 48;
 const SKIP_SECONDS_AFTER_SCENE_VISIBLE = 30;
 const MEASUREMENT_PERIOD_SECONDS = 5;
 const MIN_PIXEL_RATIO = 1;
+const CHANGE_RATE = 1;
+const NUM_TIMES_DECREASED_BEFORE_CHANGING_MAX_PIXEL_RATIO = 3;
 
 AFRAME.registerSystem("auto-pixel-ratio", {
   init() {
@@ -14,14 +17,24 @@ AFRAME.registerSystem("auto-pixel-ratio", {
     this.deltas = [];
     this.secondsSinceMeasurementStart = 0;
     this.secondsSinceSceneVisible = 0;
+    this.maxPixelRatio = window.devicePixelRatio;
+    this.pixelRatioToTimesDecreased = {};
+
+    this.disabledByPref = !!window.APP.store.state.preferences.disableAutoPixelRatio;
+    this.onPreferenceChange = this.onPreferenceChange.bind(this);
+    window.APP.store.addEventListener("statechanged", this.onPreferenceChange);
+  },
+  onPreferenceChange() {
+    this.disabledByPref = !!window.APP.store.state.preferences.disableAutoPixelRatio;
   },
   tick(time, delta) {
-    if (!this.enabled) return;
+    if (!this.enabled || this.disabledByPref || this.maxPixelRatio === MIN_PIXEL_RATIO) return;
     if (!this.el.is("visible")) return;
     if (this.secondsSinceSceneVisible < SKIP_SECONDS_AFTER_SCENE_VISIBLE) {
       this.secondsSinceSceneVisible += delta / 1000;
       return;
     }
+    if (document.visibilityState === "hidden") return;
 
     this.deltas.push(delta);
     this.secondsSinceMeasurementStart += delta / 1000;
@@ -31,16 +44,27 @@ AFRAME.registerSystem("auto-pixel-ratio", {
       const medianDelta = this.deltas[Math.floor(this.deltas.length / 2)];
       const medianFps = 1000 / medianDelta;
 
-      if (medianFps < FPS_THRESHOLD) {
-        const newPixelRatio = this.el.renderer.getPixelRatio() - 1;
+      const currentPixelRatio = this.el.renderer.getPixelRatio();
+
+      const shouldDecrease = currentPixelRatio > MIN_PIXEL_RATIO && medianFps < LOW_FPS_THRESHOLD;
+      const shouldIncrease = currentPixelRatio < this.maxPixelRatio && medianFps > HIGH_FPS_THRESHOLD;
+      if (shouldDecrease || shouldIncrease) {
+        const newPixelRatio = currentPixelRatio + (CHANGE_RATE * shouldIncrease ? 1 : -1);
         console.info(
-          `Hubs auto-pixel-ratio: Median FPS (${medianFps.toFixed()}) was below ${FPS_THRESHOLD}. ` +
-            `Reducing pixel ratio to ${newPixelRatio}.`
+          `Hubs auto-pixel-ratio: Median FPS (${medianFps.toFixed()}) was ${
+            shouldIncrease ? `above ${HIGH_FPS_THRESHOLD}` : `below ${LOW_FPS_THRESHOLD}`
+          }. ` + `Adjusting pixel ratio to ${newPixelRatio}.`
         );
         this.el.renderer.setPixelRatio(newPixelRatio);
-
-        if (newPixelRatio <= MIN_PIXEL_RATIO) {
-          this.enabled = false;
+        if (shouldDecrease) {
+          const timesDecreased = (this.pixelRatioToTimesDecreased[currentPixelRatio] || 0) + 1;
+          this.pixelRatioToTimesDecreased[currentPixelRatio] = timesDecreased;
+          if (timesDecreased >= NUM_TIMES_DECREASED_BEFORE_CHANGING_MAX_PIXEL_RATIO) {
+            console.info(
+              `Hubs auto-pixel-ratio: Attempts to maintain high frame rate with pixel ratio ${currentPixelRatio} failed ${timesDecreased} times and will not be attempted again. Lowering maximum pixel ratio to ${newPixelRatio}.`
+            );
+            this.maxPixelRatio = newPixelRatio;
+          }
         }
       }
 

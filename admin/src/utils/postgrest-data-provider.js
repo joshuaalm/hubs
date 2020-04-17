@@ -126,10 +126,11 @@ const postgrestClient = (apiUrl, httpClient = fetchJson) => {
         const { page, perPage } = params.pagination;
         const { field, order } = params.sort;
         options.headers.set("Range-Unit", "items");
-        options.headers.set("Range", (page - 1) * perPage + "-" + (page * perPage - 1));
         options.headers.set("Prefer", "count=exact");
         const query = {
-          order: field + "." + order.toLowerCase()
+          order: field + "." + order.toLowerCase(),
+          offset: (page - 1) * perPage,
+          limit: perPage
         };
         Object.assign(query, convertFilters(params.filter));
         url = `${apiUrl}/${resource}?${queryParameters(query)}`;
@@ -173,7 +174,9 @@ const postgrestClient = (apiUrl, httpClient = fetchJson) => {
         options.headers.set("Accept", "application/vnd.pgrst.object+json");
         options.headers.set("Prefer", "return=representation");
         options.method = "POST";
-        options.body = JSON.stringify(stripReadOnlyColumns(params.data));
+        const postParams = JSON.parse(JSON.stringify(params.data));
+        postParams.inserted_at = postParams.updated_at = new Date().toISOString();
+        options.body = JSON.stringify(stripReadOnlyColumns(postParams));
         break;
       }
 

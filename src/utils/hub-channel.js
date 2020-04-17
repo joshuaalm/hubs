@@ -16,9 +16,17 @@ function isSameDay(da, db) {
 }
 
 // Permissions that will be assumed if the user becomes the creator.
-const HUB_CREATOR_PERMISSIONS = ["update_hub", "update_roles", "close_hub", "mute_users", "kick_users"];
+const HUB_CREATOR_PERMISSIONS = [
+  "update_hub",
+  "update_hub_promotion",
+  "update_roles",
+  "close_hub",
+  "mute_users",
+  "kick_users"
+];
 const VALID_PERMISSIONS =
-  HUB_CREATOR_PERMISSIONS + ["tweet", "spawn_camera", "spawn_drawing", "spawn_and_move_media", "pin_objects"];
+  HUB_CREATOR_PERMISSIONS +
+  ["tweet", "spawn_camera", "spawn_drawing", "spawn_and_move_media", "pin_objects", "spawn_emoji", "fly"];
 
 export default class HubChannel extends EventTarget {
   constructor(store, hubId) {
@@ -45,6 +53,21 @@ export default class HubChannel extends EventTarget {
   canOrWillIfCreator(permission) {
     if (this._getCreatorAssignmentToken() && HUB_CREATOR_PERMISSIONS.includes(permission)) return true;
     return this.can(permission);
+  }
+
+  canEnterRoom(hub) {
+    if (!hub) return false;
+    if (this.canOrWillIfCreator("update_hub")) return true;
+
+    const roomEntrySlotCount = Object.values(this.presence.state).reduce((acc, { metas }) => {
+      const meta = metas[metas.length - 1];
+      const usingSlot = meta.presence === "room" || (meta.context && meta.context.entering);
+      return acc + (usingSlot ? 1 : 0);
+    }, 0);
+
+    // This now exists in room settings but a default is left here to support old reticulum servers
+    const DEFAULT_ROOM_SIZE = 24;
+    return roomEntrySlotCount < (hub.room_size !== undefined ? hub.room_size : DEFAULT_ROOM_SIZE);
   }
 
   // Migrates this hub channel to a new phoenix channel and presence
@@ -261,6 +284,9 @@ export default class HubChannel extends EventTarget {
         .push("sign_out")
         .receive("ok", async () => {
           this._signedIn = false;
+          const params = this.channel.params();
+          delete params.auth_token;
+          delete params.perms_token;
           await this.fetchPermissions();
           resolve();
         })
@@ -273,7 +299,7 @@ export default class HubChannel extends EventTarget {
       this.channel
         .push("get_host")
         .receive("ok", res => {
-          resolve(res.host);
+          resolve(res);
         })
         .receive("error", reject);
     });

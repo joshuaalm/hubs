@@ -7,6 +7,7 @@ const schemaCategories = [
   "advanced",
   "translations",
   "features",
+  "rooms",
   "images",
   "theme",
   "links"
@@ -32,6 +33,8 @@ function getCategoryDisplayName(category) {
       return "Translations";
     case "features":
       return "Features";
+    case "rooms":
+      return "Rooms";
     case "images":
       return "Images";
     case "theme":
@@ -109,8 +112,12 @@ function getAdminInfo() {
   return fetchWithAuth(getEndpoint("admin-info")).then(resp => resp.json());
 }
 
-function getConfig(service) {
+function getEditableConfig(service) {
   return fetchWithAuth(getEndpoint(`configs/${service}/ps`)).then(resp => resp.json());
+}
+
+function getConfig(service) {
+  return fetchWithAuth(getEndpoint(`configs/${service}`)).then(resp => resp.json());
 }
 
 function putConfig(service, config) {
@@ -123,7 +130,17 @@ function putConfig(service, config) {
 
 // An object is considered to be a config descriptor if it at least has
 // a "type" key and has no keys which aren't valid descriptor metadata.
-const DESCRIPTOR_FIELDS = ["default", "type", "of", "unmanaged", "category", "name", "description", "internal"];
+const DESCRIPTOR_FIELDS = [
+  "default",
+  "type",
+  "of",
+  "unmanaged",
+  "category",
+  "name",
+  "description",
+  "internal",
+  "source"
+];
 function isDescriptor(obj) {
   if (typeof obj !== "object") return false;
   if (!("type" in obj)) return false;
@@ -200,6 +217,7 @@ export {
   getCategoryDescription,
   getSchemas,
   getConfig,
+  getEditableConfig,
   putConfig,
   getConfigValue,
   setConfigValue,

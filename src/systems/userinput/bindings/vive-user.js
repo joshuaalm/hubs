@@ -85,6 +85,7 @@ const thawViaKeyboard = v("keyboard/thaw");
 const thawViaButtons = v("buttons/thaw");
 
 const freezeButtons = v("buttons/freeze");
+const inspectButtons = v("buttons/inspect");
 
 const rSnapRight1 = v("right/snap-right");
 const rSnapLeft1 = v("right/snap-left");
@@ -826,6 +827,11 @@ export const viveUserBindings = addSetsToBindings({
       xform: xforms.any
     },
     {
+      src: [rButton("primary").pressed, lButton("primary").pressed],
+      dest: { value: inspectButtons },
+      xform: xforms.any
+    },
+    {
       src: { value: freezeButtons },
       dest: { value: ensureFrozenViaButtons },
       xform: xforms.copy
@@ -951,9 +957,9 @@ export const viveUserBindings = addSetsToBindings({
     },
     {
       src: { value: leftTriggerPressed2 },
-      dest: { value: lTriggerRisingGrab },
-      xform: xforms.rising,
-      priority: 1
+      dest: { value: paths.actions.leftHand.stopTeleport },
+      xform: xforms.falling,
+      priority: 2
     },
     {
       src: [lGripRisingGrab],
@@ -1102,6 +1108,11 @@ export const viveUserBindings = addSetsToBindings({
       src: [rGripRisingGrab],
       dest: { value: paths.actions.cursor.right.grab },
       xform: xforms.any
+    },
+    {
+      src: { value: inspectButtons },
+      dest: { value: paths.actions.startInspecting },
+      xform: xforms.rising
     }
   ],
 
@@ -1121,6 +1132,11 @@ export const viveUserBindings = addSetsToBindings({
       src: [lGripRisingGrab],
       dest: { value: paths.actions.cursor.left.grab },
       xform: xforms.any
+    },
+    {
+      src: { value: inspectButtons },
+      dest: { value: paths.actions.startInspecting },
+      xform: xforms.rising
     }
   ],
 
@@ -1386,8 +1402,8 @@ export const viveUserBindings = addSetsToBindings({
     },
     {
       src: { value: rightTriggerPressed2 },
-      dest: { value: rTriggerRisingGrab },
-      xform: xforms.rising,
+      dest: { value: paths.actions.rightHand.stopTeleport },
+      xform: xforms.falling,
       priority: 2
     },
     {
@@ -1542,6 +1558,13 @@ export const viveUserBindings = addSetsToBindings({
       dest: { value: paths.noop },
       xform: xforms.noop,
       priority: 1000
+    }
+  ],
+  [sets.inspecting]: [
+    {
+      src: { value: inspectButtons },
+      dest: { value: paths.actions.stopInspecting },
+      xform: xforms.falling
     }
   ]
 });

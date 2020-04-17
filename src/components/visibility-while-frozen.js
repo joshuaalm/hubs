@@ -14,6 +14,7 @@ AFRAME.registerComponent("visibility-while-frozen", {
     visible: { type: "boolean", default: true },
     requireHoverOnNonMobile: { type: "boolean", default: true },
     withPermission: { type: "string" },
+    withoutPermission: { type: "string" },
     visibleIfOwned: { type: "boolean", default: true }
   },
 
@@ -23,7 +24,7 @@ AFRAME.registerComponent("visibility-while-frozen", {
     this.objWorldPos = new THREE.Vector3();
 
     waitForDOMContentLoaded().then(() => {
-      this.cam = document.getElementById("avatar-pov-node").object3D;
+      this.cam = document.getElementById("viewing-camera").object3D;
       this.updateVisibility();
     });
 
@@ -90,7 +91,21 @@ AFRAME.registerComponent("visibility-while-frozen", {
 
     const isTransforming = this.el.sceneEl.systems["transform-selected-object"].transforming;
 
-    const allowed = !this.data.withPermission || window.APP.hubChannel.canOrWillIfCreator(this.data.withPermission);
+    if (this.data.withPermission && this.data.withoutPermission) {
+      throw new Error(
+        "only withPermission or withoutPermission can be speciifed on visibility-while-frozen, not both."
+      );
+    }
+
+    const allowed = !!(
+      (!this.data.withPermission && !this.data.withoutPermission) ||
+      (this.data.withPermission &&
+        window.APP.hubChannel &&
+        window.APP.hubChannel.canOrWillIfCreator(this.data.withPermission)) ||
+      (this.data.withoutPermission &&
+        window.APP.hubChannel &&
+        !window.APP.hubChannel.canOrWillIfCreator(this.data.withoutPermission))
+    );
 
     let shouldBeVisible =
       allowed &&

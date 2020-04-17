@@ -16,7 +16,6 @@ import { faVideo } from "@fortawesome/free-solid-svg-icons/faVideo";
 import { faTimes } from "@fortawesome/free-solid-svg-icons/faTimes";
 
 import configs from "../utils/configs";
-import { messages } from "../utils/i18n";
 import IfFeature from "./if-feature";
 import StateLink from "./state-link.js";
 import { resetTips } from "../systems/tips";
@@ -323,6 +322,15 @@ export default class SettingsMenu extends Component {
             ) : (
               <div />
             )}
+            {this.props.showAsOverlay && (
+              <div className={rowClasses}>
+                <div className={classNames([styles.listItem, styles.secondaryLinkItem])}>
+                  <div className={styles.secondaryButton} onClick={() => this.props.onCloseOverlay()}>
+                    <FormattedMessage id="settings.return-to-vr" />
+                  </div>
+                </div>
+              </div>
+            )}
             {!hideExtranousItems && (
               <div className={classNames([styles.bottomLinksMain])}>
                 <IfFeature name="show_whats_new_link">
@@ -341,7 +349,7 @@ export default class SettingsMenu extends Component {
                 </button>
                 <IfFeature name="show_controls_link">
                   <a
-                    href={configs.link("controls", "https://github.com/mozilla/hubs/wiki/Hubs-Controls")}
+                    href={configs.link("controls", "https://hubs.mozilla.com/docs/hubs-controls.html")}
                     target="_blank"
                     rel="noreferrer noopener"
                   >
@@ -352,13 +360,13 @@ export default class SettingsMenu extends Component {
             )}
             {!hideExtranousItems && (
               <div className={classNames([styles.bottomLinks])}>
-                <IfFeature name="show_features_link">
+                <IfFeature name="show_docs_link">
                   <a
-                    href={configs.link("features", messages["help.docs_url"])}
+                    href={configs.link("docs", "https://hubs.mozilla.com/docs")}
                     target="_blank"
                     rel="noreferrer noopener"
                   >
-                    <FormattedMessage id="settings.features" />
+                    <FormattedMessage id="settings.help" />
                   </a>
                 </IfFeature>
                 <IfFeature name="show_community_link">
@@ -383,7 +391,7 @@ export default class SettingsMenu extends Component {
                 <IfFeature name="show_issue_report_link">
                   <a
                     className={styles.bottomLink}
-                    href={configs.link("issue_report", "/?report")}
+                    href={configs.link("issue_report", "/#/report")}
                     target="_blank"
                     rel="noreferrer noopener"
                   >

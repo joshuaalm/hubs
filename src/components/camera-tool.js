@@ -32,7 +32,7 @@ const isMobileVR = AFRAME.utils.device.isMobileVR();
 const VIEWFINDER_FPS = 6;
 const VIDEO_FPS = 25;
 // Prefer h264 if available due to faster decoding speec on most platforms
-const videoCodec = ["h264", "vp9", "vp8"].find(
+const videoCodec = ["h264", "vp9,opus", "vp8,opus", "vp9", "vp8"].find(
   codec => window.MediaRecorder && MediaRecorder.isTypeSupported(`video/webm; codecs=${codec}`)
 );
 const videoMimeType = videoCodec ? `video/webm; codecs=${videoCodec}` : null;
@@ -66,7 +66,7 @@ async function pixelsToPNG(pixels, width, height) {
 }
 
 function blitFramebuffer(renderer, src, srcX0, srcY0, srcX1, srcY1, dest, dstX0, dstY0, dstX1, dstY1) {
-  const gl = renderer.context;
+  const gl = renderer.getContext();
 
   // Copies from one framebuffer to another. Note that at the end of this function, you need to restore
   // the original framebuffer via setRenderTarget
@@ -103,7 +103,7 @@ AFRAME.registerComponent("camera-tool", {
       format: THREE.RGBAFormat,
       minFilter: THREE.LinearFilter,
       magFilter: THREE.NearestFilter,
-      encoding: THREE.sRGBEncoding,
+      encoding: THREE.GammaEncoding,
       depth: false,
       stencil: false
     });
@@ -375,6 +375,19 @@ AFRAME.registerComponent("camera-tool", {
     const stream = new MediaStream();
     const track = this.videoCanvas.captureStream(VIDEO_FPS).getVideoTracks()[0];
 
+    // HACK: FF 73+ seems to fail to decode videos with no audio track, so we always include a silent track.
+    // Note that chrome won't generate the video without some data flowing to the track, hence the oscillator.
+    const attachBlankAudio = () => {
+      const context = THREE.AudioContext.getContext();
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const destination = context.createMediaStreamDestination();
+      gain.gain.setValueAtTime(0.0001, context.currentTime);
+      oscillator.connect(destination);
+      gain.connect(destination);
+      stream.addTrack(destination.stream.getAudioTracks()[0]);
+    };
+
     if (this.data.captureAudio) {
       const selfAudio = await NAF.connection.adapter.getMediaStream(NAF.clientId, "audio");
 
@@ -394,7 +407,11 @@ AFRAME.registerComponent("camera-tool", {
 
         const audio = destination.stream.getAudioTracks()[0];
         stream.addTrack(audio);
+      } else {
+        attachBlankAudio();
       }
+    } else {
+      attachBlankAudio();
     }
 
     stream.addTrack(track);
@@ -606,6 +623,14 @@ AFRAME.registerComponent("camera-tool", {
           }
         }
 
+        const bubbleSystem = this.el.sceneEl.systems["personal-space-bubble"];
+
+        if (bubbleSystem) {
+          for (let i = 0, l = bubbleSystem.invaders.length; i < l; i++) {
+            bubbleSystem.invaders[i].disable();
+          }
+        }
+
         const tmpVRFlag = renderer.vr.enabled;
         const tmpOnAfterRender = sceneEl.object3D.onAfterRender;
         delete sceneEl.object3D.onAfterRender;
@@ -639,6 +664,7 @@ AFRAME.registerComponent("camera-tool", {
           playerHead.updateMatrices(true, true);
           playerHead.updateMatrixWorld(true, true);
         }
+
         if (this.playerHud) {
           this.playerHud.visible = playerHudWasVisible;
           if (this.el.sceneEl.systems["hubs-systems"]) {
@@ -647,6 +673,13 @@ AFRAME.registerComponent("camera-tool", {
             }
           }
         }
+
+        if (bubbleSystem) {
+          for (let i = 0, l = bubbleSystem.invaders.length; i < l; i++) {
+            bubbleSystem.invaders[i].enable();
+          }
+        }
+
         this.lastUpdate = now;
 
         if (this.videoRecorder) {
